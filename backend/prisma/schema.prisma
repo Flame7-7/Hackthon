@@ -35,7 +35,8 @@ model User {
   isBanned      Boolean  @default(false)
   banExpiresAt  DateTime?
   
-  reports       Report[]
+  reports            Report[]
+  moderationActions  ModerationAction[]
   
   @@index([sessionId])
   @@index([isBanned])

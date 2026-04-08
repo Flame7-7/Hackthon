@@ -23,7 +23,7 @@ const ChatWindow = ({ session, username, onClose }) => {
   
   // Initialize WebSocket connection
   useEffect(() => {
-    const newSocket = io(process.env.REACT_APP_WS_URL || 'ws://localhost:3001', {
+    const newSocket = io(import.meta.env.VITE_WS_URL || 'ws://localhost:3001', {
       auth: { username },
       transports: ['websocket'],
       reconnection: true,
