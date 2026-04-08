@@ -1,7 +1,7 @@
 // frontend/src/App.jsx
 import React, { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
-import ChatWindow from './components/Chat/ChatWindow';
+import ChatWindow from './components/chat/ChatWindow';
 import StartChat from './components/Matching/StartChat';
 import { SessionProvider } from './contexts/SessionContext';
 import { generateUsername } from './utils/generateUsername';

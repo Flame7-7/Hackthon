@@ -18,6 +18,7 @@ model Session {
   endedAt       DateTime?
   messageCount  Int      @default(0)
   
+  users         User[]
   reports       Report[]
   
   @@index([expiresAt])
@@ -35,7 +36,8 @@ model User {
   isBanned      Boolean  @default(false)
   banExpiresAt  DateTime?
   
-  reports       Report[]
+  reports            Report[]
+  moderationActions  ModerationAction[]
   
   @@index([sessionId])
   @@index([isBanned])

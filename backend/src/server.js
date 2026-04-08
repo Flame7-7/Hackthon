@@ -7,8 +7,8 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import { setupChatHandlers } from './websocket/chatHandler.js';
 import { setupMatchingHandlers } from './websocket/matchingHandler.js';
-import { rateLimiter } from './middleware/rateLimiter.js';
-import { errorHandler } from './middleware/errorHandler.js';
+import { rateLimiter } from './services/middleware/rateLimiter.js';
+import { errorHandler } from './services/middleware/errorHandler.js';
 
 dotenv.config();
 

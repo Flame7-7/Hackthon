@@ -1,6 +1,6 @@
 // frontend/src/components/Matching/StartChat.jsx
 import React, { useState, useEffect } from 'react';
-import { Loader, Users, MessageCircle, Sparkles, Shield, Zap, Heart, Hash, Smile } from 'lucide-react';
+import { Loader, Users, MessageCircle, Sparkles, Shield, Zap, Heart, Hash, Smile, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FiltersModal from './FiltersModal';
 import { io } from 'socket.io-client';
@@ -16,7 +16,7 @@ const StartChat = ({ username, onMatchFound, isMatching, setIsMatching }) => {
   
   // Initialize socket for matching
   useEffect(() => {
-    const newSocket = io(process.env.REACT_APP_WS_URL || 'ws://localhost:3001', {
+    const newSocket = io(import.meta.env.VITE_WS_URL || 'ws://localhost:3001', {
       auth: { username },
       transports: ['websocket']
     });

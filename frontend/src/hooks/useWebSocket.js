@@ -10,7 +10,7 @@ export const useWebSocket = (username, onEvent) => {
   useEffect(() => {
     if (!username) return;
 
-    const socket = io(process.env.REACT_APP_WS_URL || 'ws://localhost:3001', {
+    const socket = io(import.meta.env.VITE_WS_URL || 'ws://localhost:3001', {
       auth: { username },
       transports: ['websocket'],
       reconnection: true,
