@@ -17,6 +17,9 @@
     "bad-words": "^3.0.4",
     "uuid": "^9.0.0"
   },
+  "prisma": {
+    "schema": "../prisma/schema.prisma"
+  },
   "devDependencies": {
     "nodemon": "^3.0.1",
     "prisma": "^5.0.0"
