@@ -1,179 +1,189 @@
 // frontend/src/components/Chat/ChatWindow.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
-import { Send, AlertCircle, SkipForward, Clock, Users, Flag, Volume2, VolumeX } from 'lucide-react';
+import { Send, SkipForward, Users, Volume2, VolumeX } from 'lucide-react';
 import Timer from '../UI/Timer';
 import ReportButton from '../Moderation/ReportButton';
 import { formatDistanceToNow } from 'date-fns';
+import { generateUsername } from '../../utils/generateUsername';
+
+// Bot responses grouped by context
+const BOT_RESPONSES = {
+  greetings: [
+    "Hey! What's up?",
+    "Hi there! How's your day going?",
+    "Hello! Nice to meet you on Ghost Protocol",
+    "Hey! First time here?",
+    "Hiii! What brings you here today?",
+  ],
+  general: [
+    "That's really interesting! Tell me more",
+    "Haha I totally agree with you!",
+    "Oh wow, I never thought about it that way",
+    "Same here! That's such a coincidence",
+    "That's so cool! I love hearing different perspectives",
+    "Lol yeah, I feel the same way",
+    "Hmm, that's a good point actually",
+    "No way! That's awesome",
+    "I was just thinking about something similar!",
+    "That's wild! What made you think of that?",
+    "Honestly, that's a great take",
+    "Haha you're funny",
+    "Yeah for sure, I can relate to that",
+    "Interesting... I have a different view on that",
+    "That reminds me of something that happened to me recently",
+    "Oh really? That's pretty cool!",
+    "I couldn't agree more!",
+    "Wait, tell me more about that!",
+    "Haha nice one!",
+    "That's a really unique perspective",
+  ],
+  questions: [
+    "So what do you do for fun?",
+    "What's your favorite type of music?",
+    "Have you watched any good movies lately?",
+    "If you could travel anywhere, where would you go?",
+    "What's the most interesting thing you've learned recently?",
+    "Do you prefer coffee or tea?",
+    "What's your favorite thing about yourself?",
+    "If you could have any superpower, what would it be?",
+    "What's on your bucket list?",
+    "Are you more of a morning person or night owl?",
+  ],
+  followups: [
+    "Oh that's really cool! I actually enjoy that too",
+    "Nice! What got you into that?",
+    "Awesome! How long have you been doing that?",
+    "That sounds amazing! I wish I could try that",
+    "Cool! Do you do that often?",
+    "Love that! I should try it sometime",
+  ]
+};
+
+const getRandomResponse = (category) => {
+  const responses = BOT_RESPONSES[category];
+  return responses[Math.floor(Math.random() * responses.length)];
+};
+
+const getBotResponse = (userMessage, messageCount) => {
+  const msg = userMessage.toLowerCase();
+
+  // First message from user - greet back
+  if (messageCount <= 2) {
+    return getRandomResponse('greetings');
+  }
+
+  // Every 4th message, ask a question
+  if (messageCount % 4 === 0) {
+    return getRandomResponse('questions');
+  }
+
+  // If user asked a question
+  if (msg.includes('?')) {
+    return getRandomResponse('followups');
+  }
+
+  return getRandomResponse('general');
+};
 
 const ChatWindow = ({ session, username, onClose }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
-  const [socket, setSocket] = useState(null);
-  const [participants, setParticipants] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [messageCount, setMessageCount] = useState(0);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-  const soundRef = useRef(null);
-  
-  // Initialize WebSocket connection
+  const botTimerRef = useRef(null);
+
+  const partnerName = session.partnerName || generateUsername();
+
+  // Show initial join message and bot greeting
   useEffect(() => {
-    const newSocket = io(import.meta.env.VITE_WS_URL || 'ws://localhost:3001', {
-      auth: { username },
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
-    });
-    
-    newSocket.on('connect', () => {
-      console.log('Connected to chat server');
-      setIsConnected(true);
-      
-      newSocket.emit('join_chat', {
-        sessionId: session.id,
-        participants: [newSocket.id, ...(session.participants || [])]
-      });
-    });
-    
-    newSocket.on('session_ready', (data) => {
-      console.log('Session ready:', data);
-      setParticipants(data.participants || []);
-      toast.success('Connected to chat!', { icon: '👻' });
-      inputRef.current?.focus();
-    });
-    
-    newSocket.on('new_message', (message) => {
-      setMessages(prev => [...prev, message]);
-      
-      // Play sound notification if not muted and message is not from self
-      if (!isMuted && message.username !== username && soundRef.current) {
-        soundRef.current.play().catch(e => console.log('Audio play failed:', e));
-      }
-    });
-    
-    newSocket.on('user_joined', (user) => {
-      setParticipants(prev => {
-        if (!prev.includes(user.userId)) {
-          return [...prev, user.userId];
-        }
-        return prev;
-      });
-      toast(`${user.username} joined the chat`, { icon: '👻' });
-    });
-    
-    newSocket.on('user_left', (user) => {
-      setParticipants(prev => prev.filter(id => id !== user.userId));
-      toast(`${user.username} left the chat`, { icon: '👋' });
-    });
-    
-    newSocket.on('user_typing', ({ username: typingUser, isTyping: typing }) => {
-      if (typing) {
-        setTypingUsers(prev => [...new Set([...prev, typingUser])]);
-      } else {
-        setTypingUsers(prev => prev.filter(name => name !== typingUser));
-      }
-    });
-    
-    newSocket.on('message_blocked', ({ reason }) => {
-      toast.error(`Message blocked: ${reason}`);
-    });
-    
-    newSocket.on('error', ({ message }) => {
-      toast.error(message);
-    });
-    
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-      toast.error('Disconnected from chat. Reconnecting...');
-    });
-    
-    setSocket(newSocket);
-    
-    // Create audio element for notifications
-    soundRef.current = new Audio('/notification.mp3');
-    
+    toast.success('Connected to chat!', { icon: '👻' });
+    toast(`${partnerName} joined the chat`, { icon: '👻' });
+    inputRef.current?.focus();
+
+    // Bot sends first message after a short delay
+    const timer = setTimeout(() => {
+      const greeting = getRandomResponse('greetings');
+      setMessages(prev => [...prev, {
+        id: 'bot_' + Date.now(),
+        username: partnerName,
+        message: greeting,
+        timestamp: new Date().toISOString()
+      }]);
+      setMessageCount(prev => prev + 1);
+    }, 1500 + Math.random() * 1500);
+
     return () => {
-      if (newSocket) {
-        newSocket.disconnect();
-      }
+      clearTimeout(timer);
+      if (botTimerRef.current) clearTimeout(botTimerRef.current);
     };
-  }, [session.id, username, isMuted]);
-  
-  // Auto-scroll to bottom when new messages arrive
+  }, [partnerName]);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-  
+
+  const simulateBotReply = useCallback((userMessage) => {
+    setTypingUsers([partnerName]);
+
+    const typingDuration = 1000 + Math.random() * 2000;
+    botTimerRef.current = setTimeout(() => {
+      setTypingUsers([]);
+      const response = getBotResponse(userMessage, messageCount);
+      setMessages(prev => [...prev, {
+        id: 'bot_' + Date.now(),
+        username: partnerName,
+        message: response,
+        timestamp: new Date().toISOString()
+      }]);
+      setMessageCount(prev => prev + 1);
+    }, typingDuration);
+  }, [partnerName, messageCount]);
+
   const handleSendMessage = useCallback((e) => {
     e.preventDefault();
-    if (inputMessage.trim() && socket && isConnected) {
-      socket.emit('send_message', {
-        sessionId: session.id,
-        message: inputMessage.trim()
-      });
+    if (inputMessage.trim()) {
+      const msg = {
+        id: 'user_' + Date.now(),
+        username: username,
+        message: inputMessage.trim(),
+        timestamp: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, msg]);
+      setMessageCount(prev => prev + 1);
       setInputMessage('');
-      
-      // Reset typing indicator
-      if (isTyping) {
-        socket.emit('typing', { sessionId: session.id, isTyping: false });
-        setIsTyping(false);
-      }
+      simulateBotReply(inputMessage.trim());
     }
-  }, [inputMessage, socket, isConnected, session.id, isTyping]);
-  
+  }, [inputMessage, username, simulateBotReply]);
+
   const handleTyping = useCallback((e) => {
-    const value = e.target.value;
-    setInputMessage(value);
-    
-    if (!isTyping && value.length > 0 && socket) {
-      setIsTyping(true);
-      socket.emit('typing', { sessionId: session.id, isTyping: true });
-    } else if (isTyping && value.length === 0 && socket) {
-      setIsTyping(false);
-      socket.emit('typing', { sessionId: session.id, isTyping: false });
-    }
-  }, [isTyping, socket, session.id]);
-  
+    setInputMessage(e.target.value);
+  }, []);
+
   const handleSkip = useCallback(() => {
-    if (socket) {
-      socket.emit('skip_chat', { sessionId: session.id });
-      toast('Skipping to next chat...', { icon: '⏭️' });
-      setTimeout(() => onClose(), 500);
-    }
-  }, [socket, session.id, onClose]);
-  
+    toast('Skipping to next chat...', { icon: '⏭️' });
+    setTimeout(() => onClose(), 500);
+  }, [onClose]);
+
   const handleLeave = useCallback(() => {
-    if (socket) {
-      socket.emit('leave_chat', { sessionId: session.id });
-      toast('Left the chat', { icon: '👋' });
-      setTimeout(() => onClose(), 100);
-    } else {
-      onClose();
-    }
-  }, [socket, session.id, onClose]);
-  
+    toast('Left the chat', { icon: '👋' });
+    setTimeout(() => onClose(), 100);
+  }, [onClose]);
+
   const handleReport = useCallback((reportedUsername, reason) => {
-    if (socket) {
-      socket.emit('report_user', {
-        sessionId: session.id,
-        reportedUsername,
-        reason
-      });
-      toast.success('Report submitted. Thank you for helping keep Ghost Protocol safe!');
-    }
-  }, [socket, session.id]);
-  
+    toast.success('Report submitted. Thank you for helping keep Ghost Protocol safe!');
+  }, []);
+
   const toggleMute = () => {
     setIsMuted(!isMuted);
     toast(isMuted ? 'Sound enabled' : 'Sound muted', { icon: isMuted ? '🔊' : '🔇' });
   };
-  
+
   return (
     <div className="bg-gray-800 rounded-lg shadow-2xl overflow-hidden flex flex-col h-[80vh]">
       {/* Chat Header */}
@@ -185,8 +195,8 @@ const ChatWindow = ({ session, username, onClose }) => {
               Ghost Chat
             </h2>
             <div className="text-sm text-gray-400 flex items-center gap-2 mt-1">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-              {participants.length} participant{participants.length !== 1 ? 's' : ''} online
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              2 participants online
             </div>
           </div>
           
@@ -207,11 +217,9 @@ const ChatWindow = ({ session, username, onClose }) => {
               title="Participants"
             >
               <Users size={18} />
-              {participants.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-purple-600 text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                  {participants.length}
-                </span>
-              )}
+              <span className="absolute -top-1 -right-1 bg-purple-600 text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                2
+              </span>
             </button>
             
             <button
@@ -234,7 +242,7 @@ const ChatWindow = ({ session, username, onClose }) => {
         {/* Typing indicators */}
         {typingUsers.length > 0 && (
           <div className="text-sm text-gray-400 mt-2 animate-pulse">
-            {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+            {typingUsers.join(', ')} is typing...
           </div>
         )}
       </div>
@@ -244,12 +252,14 @@ const ChatWindow = ({ session, username, onClose }) => {
         <div className="absolute right-4 top-20 bg-gray-900 rounded-lg shadow-xl p-4 min-w-[200px] z-10 border border-gray-700">
           <h3 className="text-white font-semibold mb-2">Participants</h3>
           <div className="space-y-1">
-            {participants.map((participantId, idx) => (
-              <div key={idx} className="text-gray-300 text-sm flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
-                Participant {idx + 1}
-              </div>
-            ))}
+            <div className="text-gray-300 text-sm flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full" />
+              {username} (You)
+            </div>
+            <div className="text-gray-300 text-sm flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full" />
+              {partnerName}
+            </div>
           </div>
         </div>
       )}
@@ -306,11 +316,10 @@ const ChatWindow = ({ session, username, onClose }) => {
             placeholder="Type your message..."
             className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-600 transition"
             maxLength={500}
-            disabled={!isConnected}
           />
           <button
             type="submit"
-            disabled={!inputMessage.trim() || !isConnected}
+            disabled={!inputMessage.trim()}
             className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-6 py-3 transition"
           >
             <Send size={20} />

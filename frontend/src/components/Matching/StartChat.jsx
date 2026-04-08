@@ -1,88 +1,52 @@
 // frontend/src/components/Matching/StartChat.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Loader, Users, MessageCircle, Sparkles, Shield, Zap, Heart, Hash, Smile, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FiltersModal from './FiltersModal';
-import { io } from 'socket.io-client';
+import { generateUsername } from '../../utils/generateUsername';
 
 const StartChat = ({ username, onMatchFound, isMatching, setIsMatching }) => {
   const [showFilters, setShowFilters] = useState(false);
-  const [socket, setSocket] = useState(null);
   const [queuePosition, setQueuePosition] = useState(null);
   const [filters, setFilters] = useState({
     topic: 'general',
     mood: 'any'
   });
-  
-  // Initialize socket for matching
-  useEffect(() => {
-    const newSocket = io(import.meta.env.VITE_WS_URL || 'ws://localhost:3001', {
-      auth: { username },
-      transports: ['websocket']
-    });
-    
-    newSocket.on('match_found', (matchData) => {
-      console.log('Match found!', matchData);
-      setIsMatching(false);
-      onMatchFound(matchData);
-      toast.success('Match found! Starting chat...', { icon: '🎉' });
-    });
-    
-    newSocket.on('waiting_for_match', (data) => {
-      setQueuePosition(data.queuePosition?.queueLength || 0);
-    });
-    
-    newSocket.on('match_error', (error) => {
-      toast.error(error.message || 'Failed to find match');
-      setIsMatching(false);
-      setQueuePosition(null);
-    });
-    
-    newSocket.on('match_cancelled', () => {
-      setIsMatching(false);
-      setQueuePosition(null);
-    });
-    
-    setSocket(newSocket);
-    
-    return () => {
-      if (newSocket) {
-        newSocket.disconnect();
-      }
-    };
-  }, [username, setIsMatching, onMatchFound]);
+  const matchTimerRef = useRef(null);
   
   const startMatching = () => {
-    if (!socket) {
-      toast.error('Connecting to server...');
-      return;
-    }
-    
     setIsMatching(true);
-    socket.emit('find_match', filters);
+    setQueuePosition(Math.floor(Math.random() * 5) + 1);
     toast('Looking for a chat partner...', { icon: '🔍' });
+    
+    // Simulate finding a match after 2-4 seconds
+    matchTimerRef.current = setTimeout(() => {
+      const fakePartnerName = generateUsername();
+      const fakeSession = {
+        id: 'session_' + Date.now(),
+        participants: [username, fakePartnerName],
+        topic: filters.topic,
+        mood: filters.mood,
+        startedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        partnerName: fakePartnerName,
+        isDemoMode: true
+      };
+      setIsMatching(false);
+      setQueuePosition(null);
+      onMatchFound(fakeSession);
+      toast.success('Match found! Starting chat...', { icon: '🎉' });
+    }, 2000 + Math.random() * 2000);
   };
   
   const cancelMatching = () => {
-    if (socket) {
-      socket.emit('cancel_match');
+    if (matchTimerRef.current) {
+      clearTimeout(matchTimerRef.current);
     }
     setIsMatching(false);
     setQueuePosition(null);
     toast('Matching cancelled', { icon: '👋' });
   };
-  
-  // Auto-reconnect if socket disconnects
-  useEffect(() => {
-    if (socket) {
-      socket.on('disconnect', () => {
-        if (isMatching) {
-          toast.error('Connection lost. Please try again.');
-          setIsMatching(false);
-        }
-      });
-    }
-  }, [socket, isMatching, setIsMatching]);
   
   return (
     <>
